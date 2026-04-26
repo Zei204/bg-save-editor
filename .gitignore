@@ -1,0 +1,29 @@
+```
+# Executable/binary files
+bg-save-editor
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment
+.venv/
+venv/
+env/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Configuration backup
+*.bak
+*.backup
+```

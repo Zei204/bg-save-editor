@@ -8,16 +8,16 @@ Usage:
   python3 bgedit.py edit  BALDUR.gam OUT.gam  [options]
 
 Edit options (all optional, only specified values are changed):
-  --str  N     Strength (1-18)
+  --str  N     Strength (1-255)
   --strx N     Strength bonus / exceptional (0-100, used only if str=18)
-  --dex  N     Dexterity
-  --con  N     Constitution
-  --int  N     Intelligence
-  --wis  N     Wisdom
-  --cha  N     Charisma
-  --hp   N     Current + Max HP set to N
-  --xp   N     Experience points
-  --gold N     Party gold (stored in GAM header)
+  --dex  N     Dexterity (1-255)
+  --con  N     Constitution (1-255)
+  --int  N     Intelligence (1-255)
+  --wis  N     Wisdom (1-255)
+  --cha  N     Charisma (1-255)
+  --hp   N     Current + Max HP set to N (0-65535)
+  --xp   N     Experience points (0-4294967295)
+  --gold N     Party gold (stored in GAM header, 0-4294967295)
   --all-members  Apply stat changes to ALL party members (default: protagonist only)
 
 Examples:
@@ -29,6 +29,7 @@ Examples:
 import sys
 import struct
 import argparse
+import os
 
 GAM_SIG         = b'GAME'
 GAM_GOLD_OFF    = 0x0018
@@ -52,8 +53,24 @@ OFF_DEX     = 0x023C
 OFF_CON     = 0x023D
 OFF_CHA     = 0x023E
 
+# Valid ranges for stats
+STAT_MIN = 1
+STAT_MAX = 255
+STRX_MIN, STRX_MAX = 0, 100
+HP_MIN, HP_MAX = 0, 65535
+XP_MIN, XP_MAX = 0, 4294967295
+GOLD_MIN, GOLD_MAX = 0, 4294967295
+
+
+def validate_stat(name, value, min_val, max_val):
+    if not (min_val <= value <= max_val):
+        raise ValueError(f"{name} must be between {min_val} and {max_val}, got {value}")
+    return value
+
 
 def read_gam(path):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Input file not found: {path}")
     with open(path, 'rb') as f:
         data = bytearray(f.read())
     if data[:4] != GAM_SIG:
@@ -131,6 +148,12 @@ def cmd_info(gam_path):
 
 
 def cmd_edit(gam_path, out_path, patches, all_members=False):
+    # Protection against overwriting the source file
+    if os.path.abspath(gam_path) == os.path.abspath(out_path):
+        print("Error: Output file cannot be the same as input file.", file=sys.stderr)
+        print("Please specify a different output filename.", file=sys.stderr)
+        sys.exit(1)
+
     data = read_gam(gam_path)
     if 'gold' in patches:
         struct.pack_into('<I', data, GAM_GOLD_OFF, patches.pop('gold'))
@@ -178,16 +201,41 @@ def main():
         cmd_info(args.gam)
     elif args.cmd == 'edit':
         patches = {}
-        if args.str_  is not None: patches['str']    = args.str_
-        if args.strx  is not None: patches['str_x']  = args.strx
-        if args.dex   is not None: patches['dex']    = args.dex
-        if args.con   is not None: patches['con']    = args.con
-        if args.int_  is not None: patches['int']    = args.int_
-        if args.wis   is not None: patches['wis']    = args.wis
-        if args.cha   is not None: patches['cha']    = args.cha
-        if args.xp    is not None: patches['xp']     = args.xp
-        if args.gold  is not None: patches['gold']   = args.gold
-        if args.hp    is not None: patches['cur_hp'] = patches['max_hp'] = args.hp
+        try:
+            if args.str_  is not None: 
+                validate_stat("STR", args.str_, STAT_MIN, STAT_MAX)
+                patches['str'] = args.str_
+            if args.strx  is not None: 
+                validate_stat("STRX (exceptional strength)", args.strx, STRX_MIN, STRX_MAX)
+                patches['str_x'] = args.strx
+            if args.dex   is not None: 
+                validate_stat("DEX", args.dex, STAT_MIN, STAT_MAX)
+                patches['dex'] = args.dex
+            if args.con   is not None: 
+                validate_stat("CON", args.con, STAT_MIN, STAT_MAX)
+                patches['con'] = args.con
+            if args.int_  is not None: 
+                validate_stat("INT", args.int_, STAT_MIN, STAT_MAX)
+                patches['int'] = args.int_
+            if args.wis   is not None: 
+                validate_stat("WIS", args.wis, STAT_MIN, STAT_MAX)
+                patches['wis'] = args.wis
+            if args.cha   is not None: 
+                validate_stat("CHA", args.cha, STAT_MIN, STAT_MAX)
+                patches['cha'] = args.cha
+            if args.xp    is not None: 
+                validate_stat("XP", args.xp, XP_MIN, XP_MAX)
+                patches['xp'] = args.xp
+            if args.gold  is not None: 
+                validate_stat("Gold", args.gold, GOLD_MIN, GOLD_MAX)
+                patches['gold'] = args.gold
+            if args.hp    is not None: 
+                validate_stat("HP", args.hp, HP_MIN, HP_MAX)
+                patches['cur_hp'] = patches['max_hp'] = args.hp
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        
         if not patches:
             print("Nothing to patch."); sys.exit(1)
         cmd_edit(args.gam, args.out, patches, args.all_members)
